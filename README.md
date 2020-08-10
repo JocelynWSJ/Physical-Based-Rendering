@@ -3,12 +3,12 @@ Final Project
 
 **University of Pennsylvania, CIS 561: Advanced Computer Graphics, Final Project**
 
-Shijia's Photon Mapper Result
+Shijia's  Result
 ------------
-![](photonResult1024.png)
+![](FinalProject\photonResult1024.png)
 
-![](result50.png)
+![](FinalProject\result50.png)
 
-![](ufo30.png)
+![](FinalProject\ufo30.png)
 
 
