@@ -1,0 +1,327 @@
+==================================
+Buffer Code
+==================================
+#define OBJ_FLOOR		1
+#define OBJ_CEILING		2
+#define OBJ_BACKWALL	3
+#define OBJ_LEFTWALL	4
+#define OBJ_RIGHTWALL	5
+#define OBJ_LIGHT		6
+#define OBJ_SHORTBLOCK	7
+#define OBJ_TALLBLOCK	8
+
+#define SDF_FLOOR		pos.y+3.
+#define SDF_CEILING		6. -pos.y
+#define SDF_BACKWALL	5. - pos.z
+#define SDF_LEFTWALL	5. - pos.x
+#define SDF_RIGHTWALL	pos.x+5.
+#define SDF_LIGHT		6
+#define SDF_SHORTBLOCK	sdBox(rotateY(pos+vec3(2., 1., -0.75), 0.13*3.1415926), vec3(1.5, 1.5, 1.5))
+#define SDF_TALLBLOCK	sdBox(rotateY(pos+vec3(-2., 0., -3.), -0.14*3.1415926), vec3(1.5, 3., 1.5))
+
+
+const float FOVY = 3.141569 * 0.25;
+const int RAY_STEPS = 256;
+const float FOCAL_LENGTH = 23.0;
+const float FOCAL_RANGE = 16.0;
+
+const vec3 lightPos = vec3(0., 5.8, -1.);
+
+const vec3 lightColor = vec3(1.0);
+const vec3 lightDiffuseColor = vec3(1.0);
+const vec3 leftWallColor = vec3(0.63, 0.065, 0.05);
+const vec3 rightWallColor = vec3(0.14, 0.45, 0.091);
+const vec3 MattewhiteColor = vec3(0.85, 0.81, 0.78);
+
+struct Intersection {
+    float t;
+    vec3 color;
+    vec3 p;
+    int object; // Assign every object in our scene a unique ID int
+};
+    
+    
+vec3 rotateY(vec3 p, float a) {
+    return vec3(cos(a) * p.x + sin(a) * p.z, p.y, -sin(a) * p.x + cos(a) * p.z);
+}
+
+float sdBox(vec3 p, vec3 b) {
+	vec3 d = abs(p) - b;
+	return min(max(d.x, max(d.y, d.z)), 0.) + length(max(d, 0.));
+}
+
+float sdPlane( vec3 p, vec4 n )
+{
+  // n must be normalized
+  return dot(p,n.xyz) + n.w;
+}
+
+void CoordinateSystem(in vec3 v1, out vec3 v2, out vec3 v3) {
+    if (abs(v1.x) > abs(v1.y))
+            v2 = vec3(-v1.z, 0.0, v1.x) / sqrt(v1.x * v1.x + v1.z * v1.z);
+        else
+            v2 = vec3(0.0, v1.z, -v1.y) / sqrt(v1.y * v1.y + v1.z * v1.z);
+        v3 = cross(v1, v2);
+}
+
+mat3 TangentToWorld(vec3 nor) {
+	vec3 tangent, bitangent;
+    CoordinateSystem(nor, tangent, bitangent);
+    return mat3(tangent, bitangent, nor);
+}
+
+
+void sceneMap3D(vec3 pos, out float t, out int obj) {
+    t = SDF_FLOOR;
+    obj = OBJ_FLOOR;
+    
+    float t2;
+    if((t2 = SDF_CEILING) < t) {
+        t = t2;
+        obj = OBJ_CEILING;
+    }
+    
+    float t3;
+    if((t3 = SDF_BACKWALL) < t) {
+        t = t3;
+        obj = OBJ_BACKWALL;
+    }
+    
+    float t4;
+    if((t4 = SDF_LEFTWALL) < t) {
+        t = t4;
+        obj = OBJ_LEFTWALL;
+    }
+    
+    float t5;
+    if((t5 = SDF_RIGHTWALL) < t) {
+        t = t5;
+        obj = OBJ_RIGHTWALL;
+    }
+    
+    float t7;
+    if((t7 = SDF_SHORTBLOCK) < t) {
+        t = t7;
+        obj = OBJ_SHORTBLOCK;
+    }
+    
+    float t8;
+    if((t8 = SDF_TALLBLOCK) < t) {
+        t = t8;
+        obj = OBJ_TALLBLOCK;
+    }
+}
+
+
+float sceneMap3D(vec3 pos) {
+    float t = SDF_FLOOR;
+    
+    float t2;
+    if((t2 = SDF_CEILING) < t) {
+        t = t2;
+    }
+    
+    float t3;
+    if((t3 = SDF_BACKWALL) < t) {
+        t = t3;
+    }
+    
+    float t4;
+    if((t4 = SDF_LEFTWALL) < t) {
+        t = t4;
+    }
+    
+    float t5;
+    if((t5 = SDF_RIGHTWALL) < t) {
+        t = t5;
+    }
+    
+    float t7;
+    if((t7 = SDF_SHORTBLOCK) < t) {
+        t = t7;
+    }
+    
+    float t8;
+    if((t8 = SDF_TALLBLOCK) < t) {
+        t = t8;
+    }
+    
+    return t;
+}
+
+vec3 computeNormal(vec3 pos) {
+    vec3 epsilon = vec3(0.0, 0.001, 0.0);
+    return normalize( vec3( sceneMap3D(pos + epsilon.yxx) - sceneMap3D(pos - epsilon.yxx),
+                            sceneMap3D(pos + epsilon.xyx) - sceneMap3D(pos - epsilon.xyx),
+                            sceneMap3D(pos + epsilon.xxy) - sceneMap3D(pos - epsilon.xxy)));
+}
+
+void march(vec3 origin, vec3 dir, out float t, out int hitObj) {
+    t = 0.001;
+    for(int i = 0; i < RAY_STEPS; ++i) {
+        vec3 pos = origin + t * dir;
+    	float m;
+        sceneMap3D(pos, m, hitObj);
+        if(m < 0.01) {
+            return;
+        }
+        t += m;
+    }
+    t = -1.0;
+    hitObj = -1;
+}
+
+const vec3 a = vec3(0.5, 0.5, 0.5);
+const vec3 b = vec3(0.5, 0.5, 0.5);
+const vec3 c = vec3(2.0, 1.0, 1.0);
+const vec3 d = vec3(0.5, 0.2, 0.25);
+
+vec3 colorPalette(float t) {
+    return a + b * cos(6.28 * (t * c + d));
+}
+
+vec3 computeMaterial(int hitObj, vec3 p, vec3 n, vec3 lightVec, vec3 view) {
+
+    float lambert = max(0.0, dot(lightVec, n));
+    switch(hitObj) {
+        case OBJ_FLOOR:
+        return MattewhiteColor*lambert;
+        break;
+        
+        case OBJ_CEILING:
+        return MattewhiteColor*lambert;
+        break;
+        
+        case OBJ_BACKWALL:
+        return MattewhiteColor*lambert;
+        break;
+        
+        case OBJ_LEFTWALL:
+        return leftWallColor*lambert;
+        break;
+        
+        case OBJ_RIGHTWALL:
+        return rightWallColor*lambert;
+        break;
+        
+        
+        case OBJ_SHORTBLOCK:
+        return MattewhiteColor*lambert;
+        break;
+        
+        case OBJ_TALLBLOCK:
+        return MattewhiteColor*lambert;
+        break;
+        
+        case -1:
+        return vec3(0., 0., 0.);
+        break;
+    }
+    return vec3(0., 0., 0.);
+}
+
+
+Intersection sdf3D(vec3 dir, vec3 eye) {
+    float t;
+    int hitObj;
+    march(eye, dir, t, hitObj);
+
+    vec3 isect = eye + t * dir;
+    vec3 nor = computeNormal(isect);
+    //vec3 lightDir = normalize(lightPos - isect);
+    
+    vec3 lightDir = normalize(-isect+lightPos); // dummy value
+    
+    vec3 surfaceColor = computeMaterial(hitObj, isect, nor, lightDir, normalize(eye - isect));
+    
+    return Intersection(t, surfaceColor, isect, hitObj);
+}
+
+
+// Returns direction of ray
+vec3 rayCast(vec3 eye, vec3 ref, vec2 ndc) {
+    vec3 F = ref - eye;
+    vec3 R = normalize(cross(F, vec3(0,1,0)));
+    vec3 U = normalize(cross(R, F));
+    
+    vec3 V = U * length(F) * tan(FOVY * 0.5);
+    vec3 H = R * length(F) * tan(FOVY * 0.5) * float(iResolution.x) / iResolution.y;
+    
+    vec3 p = ref + ndc.x * H + ndc.y * V;
+    
+    return normalize(p - eye);
+}
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+    // Normalized pixel coordinates (from 0 to 1)
+    vec2 uv = fragCoord / iResolution.xy;
+    // Convert to range [-1, 1]
+    uv = uv * 2.0 - vec2(1.0, 1.0);
+    
+    vec3 eye = vec3(0, 4, -15);
+    vec3 ref = vec3(0, 1.5, 0);
+    
+    vec3 rayDir = rayCast(eye, ref, uv);
+    
+    Intersection isect = sdf3D(rayDir, eye);
+    //
+    vec3 forward = normalize(eye-ref);
+    float distAlongCamZ = abs(dot(forward, eye-isect.p));
+    
+    float animatedFocalLength = FOCAL_LENGTH + 10.0 * sin(iTime);
+    float dofBlurAmount = min(1.0, abs(distAlongCamZ - animatedFocalLength) / FOCAL_RANGE);
+    
+    dofBlurAmount = pow(dofBlurAmount, 0.5);
+
+    fragColor = vec4(isect.color, dofBlurAmount);
+}
+
+
+
+
+
+
+==================================
+Image Code
+==================================
+float normpdf(in float x, in float sigma)
+{
+	return 0.39894*exp(-0.5*x*x/(sigma*sigma))/sigma;
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord)
+{
+    // from https://www.shadertoy.com/view/XdfGDH
+    const int mSize = 11;
+    const int kSize = (mSize-1)/2;
+    float kernel[mSize];
+    vec3 final_color = vec3(0.0);
+
+    //create the 1-D kernel
+    float sigma = 20.0;
+    float Z = 0.0;
+    for (int j = 0; j <= kSize; ++j) {
+        kernel[kSize+j] = kernel[kSize-j] = normpdf(float(j), sigma);
+    }
+
+    //get the normalization factor (as the gaussian has been clamped)
+    for (int j = 0; j < mSize; ++j) {
+        Z += kernel[j];
+    }
+    
+    //read out the texels
+    for (int i=-kSize; i <= kSize; ++i) {
+        for (int j=-kSize; j <= kSize; ++j) {
+            final_color += kernel[kSize+j]*kernel[kSize+i]*texture(iChannel0, (fragCoord.xy+vec2(float(i),float(j))) / iResolution.xy).rgb;
+
+        }
+    }
+    
+    vec2 uv = fragCoord/iResolution.xy;
+    vec4 unblurredColor = texture(iChannel0, uv);
+    fragColor = vec4(mix(unblurredColor.rgb, final_color/(Z*Z), unblurredColor.a), 1.0);
+    
+    float vignette = smoothstep(1.75, 0.0, length((2.0 * uv) - vec2(1.0)));
+    fragColor = mix(vec4(0.0, 0.0, 0.1, 1.0), fragColor, vignette);
+}
